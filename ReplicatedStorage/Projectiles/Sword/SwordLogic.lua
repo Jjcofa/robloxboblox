@@ -1,14 +1,30 @@
 -- @ScriptType: Script
 local swordModel = script.Parent
-local handle = swordModel:FindFirstChild("Handle")
+-- Если скрипт случайно оказался внутри Handle, эта проверка поможет:
+if swordModel.Name == "Handle" then
+	swordModel = swordModel.Parent
+end
+
+local handle = swordModel:WaitForChild("Handle", 5) -- Ждем Handle до 5 секунд
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+-- Если Handle так и не нашелся, останавливаем скрипт, чтобы не было ошибок
+if not handle then 
+	warn("SwordLogic: Handle не найден в модели!")
+	return 
+end
 
 local DAMAGE = swordModel:GetAttribute("Damage") or 5
+local CRIT_CHANCE = swordModel:GetAttribute("CritChance") or 5
+local CRIT_MULT = swordModel:GetAttribute("CritMultiplier") or 2
+
 local hitList = {} 
 local hasPlayedHitSound = false 
 
--- Находим оригинальный звук взмаха
 local slashSound = handle:FindFirstChild("SwordSlash") or handle:FindFirstChild("SwordLunge")
 
+-- Ищем все части меча для касания
 for _, part in pairs(swordModel:GetDescendants()) do
 	if part:IsA("BasePart") then
 		part.Touched:Connect(function(hit)
@@ -18,20 +34,56 @@ for _, part in pairs(swordModel:GetDescendants()) do
 			if humanoid and character.Name == "Enemy" and humanoid.Health > 0 then
 				if not hitList[character] then
 					hitList[character] = true 
-					humanoid:TakeDamage(DAMAGE)
 
-					-- Создаем ОТДЕЛЬНУЮ копию для звука попадания
+					-- РАСЧЕТ КРИТА
+					local finalDamage = DAMAGE
+					local isCrit = math.random(1, 100) <= CRIT_CHANCE
+					if isCrit then
+						finalDamage = DAMAGE * CRIT_MULT
+					end
+
+					humanoid:TakeDamage(finalDamage)
+
+					-- === ВЫЛЕТАЮЩИЕ ЦИФРЫ (ЧЕТКИЕ И ДОЛГИЕ) ===
+					local head = character:FindFirstChild("Head") or character.PrimaryPart
+					if head then
+						local bgui = Instance.new("BillboardGui")
+						bgui.Name = "DamageGui"
+						bgui.Size = isCrit and UDim2.new(0, 130, 0, 65) or UDim2.new(0, 80, 0, 40)
+						bgui.Adornee = head
+						bgui.StudsOffset = Vector3.new(math.random(-1.5, 1.5), 2, 0) 
+						bgui.AlwaysOnTop = true
+
+						local lbl = Instance.new("TextLabel")
+						lbl.BackgroundTransparency = 1
+						lbl.Size = UDim2.new(1, 0, 1, 0)
+						lbl.Text = isCrit and "CRIT! "..math.floor(finalDamage) or tostring(math.floor(finalDamage))
+
+						lbl.TextColor3 = isCrit and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(255, 255, 255)
+
+						-- Настройки видимости по твоему запросу:
+						lbl.TextTransparency = isCrit and 0 or 0.1 -- Крит полностью виден
+						lbl.TextStrokeTransparency = 0.5 -- Контур для четкости
+						lbl.TextScaled = true
+						lbl.Font = Enum.Font.LuckiestGuy
+						lbl.Parent = bgui
+						bgui.Parent = character
+
+						-- Время жизни 1 секунда
+						local displayTime = 1.0
+						TweenService:Create(bgui, TweenInfo.new(displayTime), {StudsOffset = bgui.StudsOffset + Vector3.new(0, 4, 0)}):Play()
+						TweenService:Create(lbl, TweenInfo.new(displayTime), {TextTransparency = 1}):Play()
+						Debris:AddItem(bgui, displayTime)
+					end
+
+					-- Звук
 					if slashSound and not hasPlayedHitSound then
 						hasPlayedHitSound = true
-
 						local hitSfx = slashSound:Clone()
-						hitSfx.Name = "HitEffectSound"
 						hitSfx.Parent = handle
-						hitSfx.Volume = slashSound.Volume * 0.8 -- Чуть тише основного взмаха
+						hitSfx.Volume = slashSound.Volume * 0.8 
 						hitSfx:Play()
-
-						-- Удаляем копию, когда она доиграет
-						game:GetService("Debris"):AddItem(hitSfx, 1)
+						Debris:AddItem(hitSfx, 1)
 					end
 				end
 			end
