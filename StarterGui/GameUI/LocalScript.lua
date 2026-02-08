@@ -6,9 +6,10 @@ local player = Players.LocalPlayer
 local gui = script.Parent
 local frame = gui:WaitForChild("Frame") -- Наше меню
 
--- Ищем ДВЕ кнопки по их новым именам
+-- Ищем ТРИ кнопки по их именам
 local fireballBtn = frame:WaitForChild("FireballBtn")
 local swordBtn = frame:WaitForChild("SwordBtn")
+local bombBtn = frame:WaitForChild("BombBtn") -- [НОВОЕ] Ищем кнопку бомбы
 
 local startGameEvent = ReplicatedStorage:WaitForChild("Events"):WaitForChild("StartGameEvent")
 
@@ -38,4 +39,9 @@ end)
 -- Если нажали на Sword
 swordBtn.MouseButton1Click:Connect(function()
 	startGame("Sword")
+end)
+
+-- [НОВОЕ] Если нажали на Bomb
+bombBtn.MouseButton1Click:Connect(function()
+	startGame("Bomb") -- Отправляем серверу слово "Bomb", и GameManager выдаст нам её
 end)
