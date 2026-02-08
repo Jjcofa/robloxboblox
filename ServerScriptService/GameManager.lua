@@ -15,6 +15,7 @@ local selectUpgradeEvent = ReplicatedStorage.Events:WaitForChild("SelectUpgradeE
 
 -- == ОБЪЕКТЫ ==
 local enemyTemplate = ReplicatedStorage:WaitForChild("Enemy") 
+local enemyBlackTemplate = ReplicatedStorage:WaitForChild("EnemyBlack") -- [ДОБАВИТЬ ЭТУ СТРОКУ]
 local timeLeftValue = ReplicatedStorage:WaitForChild("TimeLeft") 
 local fireballTemplate = ReplicatedStorage:WaitForChild("Projectiles"):WaitForChild("Fireball") 
 local swordTemplate = ReplicatedStorage:WaitForChild("Projectiles"):WaitForChild("Sword")
@@ -22,12 +23,15 @@ local appleTemplate = ReplicatedStorage:WaitForChild("AppleDrop")
 
 -- == БАЗА УЛУЧШЕНИЙ ==
 local UpgradeDB = require(ServerScriptService:WaitForChild("UpgradeDB"))
+-- [НОВОЕ] Подключаем WaveManager
+local WaveManager = require(ServerScriptService:WaitForChild("WaveManager"))
+local EnemyRegistry = require(ServerScriptService:WaitForChild("EnemyRegistry")) -- [ВОТ ОНА, ОДНА СТРОКА]
 
 -- == НАСТРОЙКИ ==
 local GAME_TIME = 600 
-local SPAWN_RATE = 2  
+local SPAWN_RATE = 1.5  
 local XP_PER_KILL = 1    
-local MAX_LEVEL = 10     -- Увеличил макс уровень
+local MAX_LEVEL = 10     
 
 local activeSessions = {}
 
@@ -65,8 +69,19 @@ end
 -- == ФУНКЦИИ ЗАМОРОЗКИ ==
 local function toggleZombies(freeze)
 	for _, obj in pairs(workspace:GetChildren()) do
-		if obj.Name == "Enemy" and obj:FindFirstChild("HumanoidRootPart") then
+		-- Используем Реестр, чтобы найти ВСЕХ врагов
+		if EnemyRegistry.IsEnemy(obj) and obj:FindFirstChild("HumanoidRootPart") then
 			obj.HumanoidRootPart.Anchored = freeze
+
+			-- Дополнительно: Если морозим, останавливаем анимацию ходьбы (Path)
+			local hum = obj:FindFirstChild("Humanoid")
+			if hum then
+				if freeze then
+					hum.WalkSpeed = 0 -- Чтобы ноги не скользили
+				else
+					hum.WalkSpeed = 16 -- Или какая у них скорость по умолчанию
+				end
+			end
 		end
 	end
 end
@@ -133,16 +148,29 @@ selectUpgradeEvent.OnServerEvent:Connect(function(player, choiceIndex)
 	end
 end)
 
--- 5. ПОИСК ВРАГА
+-- 5. ПОИСК ВРАГА (ВЕРСИЯ С РЕЕСТРОМ)
 local function findNearestEnemy(playerPos, range)
 	local closestEnemy = nil
 	local minDistance = range
+
 	for _, object in pairs(workspace:GetChildren()) do
-		if object.Name == "Enemy" and object:FindFirstChild("Humanoid") and object:FindFirstChild("HumanoidRootPart") then
+
+		-- [ГЛАВНОЕ ИЗМЕНЕНИЕ]
+		-- Спрашиваем у Реестра: "Это враг?"
+		-- Теперь неважно, как его зовут, главное, чтобы он был в списке Registry.
+		if EnemyRegistry.IsEnemy(object) and object:FindFirstChild("Humanoid") and object:FindFirstChild("HumanoidRootPart") then
+
 			local hum = object.Humanoid
 			if hum.Health > 0 then
 				local dist = (object.HumanoidRootPart.Position - playerPos).Magnitude
-				if dist < minDistance then
+
+				-- Компенсация для больших врагов всё равно нужна
+				local compensation = 0
+				if object.Name == "EnemyBlack" then 
+					compensation = 3 -- Даем фору толстяку
+				end
+
+				if (dist - compensation) < minDistance then
 					closestEnemy = object.HumanoidRootPart
 					minDistance = dist
 				end
@@ -166,10 +194,10 @@ local function startPlayerSession(player, weaponChoice)
 
 	if weaponChoice == "Sword" then
 		initialStats.damage = 5
-		initialStats.cooldown = 1.3 -- Чуть ускорил базу меча
+		initialStats.cooldown = 1.3 
 		initialStats.range = 6
 	elseif weaponChoice == "Fireball" then
-		initialStats.damage = 10
+		initialStats.damage = 20
 		initialStats.cooldown = 2.0
 		initialStats.speed = 40
 		initialStats.range = 60
@@ -182,7 +210,8 @@ local function startPlayerSession(player, weaponChoice)
 		weapon = weaponChoice,
 		stats = initialStats,
 		lastAttackTime = 0,     
-		lastEnemySpawnTime = 0  
+		lastEnemySpawnTime = 0,
+		waveTriggered = false -- [НОВОЕ] Флаг, была ли волна
 	}
 
 	task.spawn(function()
@@ -193,8 +222,10 @@ local function startPlayerSession(player, weaponChoice)
 			local currentTime = os.time() 
 			local exactTime = os.clock()  
 
-			local elapsed = currentTime - session.startTime
-			local remaining = math.max(0, GAME_TIME - elapsed)
+			-- [ИЗМЕНЕНИЕ] Считаем время от начала игры для волны
+			local timeInGame = currentTime - session.startTime
+			local remaining = math.max(0, GAME_TIME - timeInGame)
+
 			timeLeftValue.Value = remaining
 
 			local isDead = (not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0)
@@ -205,7 +236,14 @@ local function startPlayerSession(player, weaponChoice)
 				break 
 			end
 
-			-- == АТАКА ИГРОКА ==
+			-- [НОВОЕ] ПРОВЕРКА ВОЛНЫ (30 секунд)
+			if timeInGame >= 30 and not session.waveTriggered then
+				session.waveTriggered = true
+				-- Спавним 30 зомби за 15 секунд
+				WaveManager.triggerBigWave(player, 30, 15)
+			end
+
+			-- == АТАКА ИГРОКА (ТВОЙ КОД, БЕЗ ИЗМЕНЕНИЙ) ==
 			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and not isDead then
 				local root = player.Character.HumanoidRootPart
 
@@ -225,7 +263,7 @@ local function startPlayerSession(player, weaponChoice)
 							fb:SetAttribute("CritMultiplier", session.stats.critMultiplier)
 							fb:SetAttribute("TargetPlayer", player.Name)
 
-							-- Оранжевый шлейф
+							-- Оранжевый шлейф (ТВОЙ КОД)
 							local mainPart = fb.PrimaryPart or fb:FindFirstChildWhichIsA("BasePart")
 							if mainPart then
 								local att0 = Instance.new("Attachment", mainPart)
@@ -282,7 +320,7 @@ local function startPlayerSession(player, weaponChoice)
 								local duration = 0.4
 								local startTime = os.clock()
 
-								-- Эффекты меча
+								-- Эффекты меча (ТВОЙ КОД)
 								local swordTrail = Instance.new("Trail")
 								swordTrail.Attachment0 = Instance.new("Attachment", handle)
 								swordTrail.Attachment1 = Instance.new("Attachment", handle)
@@ -316,23 +354,50 @@ local function startPlayerSession(player, weaponChoice)
 				end 
 			end 
 
-			-- СПАВН ВРАГОВ
+			-- СПАВН ВРАГОВ (ОБЫЧНЫЙ)
 			if currentTime - session.lastEnemySpawnTime >= SPAWN_RATE then
 				session.lastEnemySpawnTime = currentTime 
 				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 					local root = player.Character.HumanoidRootPart
-					local spawnPos = root.Position + Vector3.new(math.random(-50, 50), 5, math.random(-50, 50))
 
-					local newEnemy = enemyTemplate:Clone()
+					-- [НОВОЕ] 1. Выбираем, кого спавнить
+					local templateToSpawn = enemyTemplate -- По умолчанию обычный
+
+					-- Если прошло больше 45 сек И выпал шанс 1 из 5 (20%)
+					if timeInGame >= 45 and math.random(1, 5) == 1 then
+						templateToSpawn = enemyBlackTemplate
+					end
+
+					-- 2. Расчет позиции (Твой код с пончиком)
+					local minDist = 60  
+					local maxDist = 120 
+
+					local angle = math.rad(math.random(1, 360)) 
+					local dist = math.random(minDist, maxDist)  
+
+					local offsetX = math.cos(angle) * dist
+					local offsetZ = math.sin(angle) * dist
+
+					local spawnPos = root.Position + Vector3.new(offsetX, 5, offsetZ)
+
+					-- 3. Спавним выбранного (templateToSpawn)
+					local newEnemy = templateToSpawn:Clone()
 					newEnemy.Parent = workspace
-					newEnemy:PivotTo(CFrame.new(spawnPos))
+					newEnemy:PivotTo(CFrame.new(spawnPos, root.Position)) -- Лицом к игроку
 					newEnemy:SetAttribute("TargetPlayer", player.Name)
 
 					local hum = newEnemy:FindFirstChild("Humanoid")
 					if hum then
 						hum.Died:Connect(function()
 							player.leaderstats.Kills.Value += 1
-							addExp(player, XP_PER_KILL) 
+
+							-- [НОВОЕ] Проверка опыта (Черный дает x3)
+							local amountXP = XP_PER_KILL
+							if newEnemy.Name == "EnemyBlack" then
+								amountXP = XP_PER_KILL * 3
+							end
+							addExp(player, amountXP) 
+
 							if math.random(1, 100) <= 5 and appleTemplate then
 								local drop = appleTemplate:Clone()
 								drop.CFrame = newEnemy.HumanoidRootPart.CFrame 
