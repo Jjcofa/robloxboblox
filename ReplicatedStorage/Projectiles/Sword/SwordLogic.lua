@@ -1,15 +1,17 @@
 -- @ScriptType: Script
+local ServerScriptService = game:GetService("ServerScriptService")
+-- Подключаем наш справочник врагов
+local EnemyRegistry = require(ServerScriptService:WaitForChild("EnemyRegistry"))
+
 local swordModel = script.Parent
--- Если скрипт случайно оказался внутри Handle, эта проверка поможет:
 if swordModel.Name == "Handle" then
 	swordModel = swordModel.Parent
 end
 
-local handle = swordModel:WaitForChild("Handle", 5) -- Ждем Handle до 5 секунд
+local handle = swordModel:WaitForChild("Handle", 5) 
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 
--- Если Handle так и не нашелся, останавливаем скрипт, чтобы не было ошибок
 if not handle then 
 	warn("SwordLogic: Handle не найден в модели!")
 	return 
@@ -21,7 +23,6 @@ local CRIT_MULT = swordModel:GetAttribute("CritMultiplier") or 2
 
 local hitList = {} 
 local hasPlayedHitSound = false 
-
 local slashSound = handle:FindFirstChild("SwordSlash") or handle:FindFirstChild("SwordLunge")
 
 -- Ищем все части меча для касания
@@ -31,7 +32,11 @@ for _, part in pairs(swordModel:GetDescendants()) do
 			local character = hit.Parent
 			local humanoid = character:FindFirstChild("Humanoid")
 
-			if humanoid and character.Name == "Enemy" and humanoid.Health > 0 then
+			-- [ГЛАВНОЕ ИСПРАВЛЕНИЕ]
+			-- Теперь мы спрашиваем у Registry: "Это враг?"
+			-- Это сработает для всех, кто есть в твоем списке (Enemy, EnemyBlack и т.д.)
+			if humanoid and EnemyRegistry.IsEnemy(character) and humanoid.Health > 0 then
+
 				if not hitList[character] then
 					hitList[character] = true 
 
@@ -44,7 +49,7 @@ for _, part in pairs(swordModel:GetDescendants()) do
 
 					humanoid:TakeDamage(finalDamage)
 
-					-- === ВЫЛЕТАЮЩИЕ ЦИФРЫ (ЧЕТКИЕ И ДОЛГИЕ) ===
+					-- === ВЫЛЕТАЮЩИЕ ЦИФРЫ ===
 					local head = character:FindFirstChild("Head") or character.PrimaryPart
 					if head then
 						local bgui = Instance.new("BillboardGui")
@@ -58,18 +63,15 @@ for _, part in pairs(swordModel:GetDescendants()) do
 						lbl.BackgroundTransparency = 1
 						lbl.Size = UDim2.new(1, 0, 1, 0)
 						lbl.Text = isCrit and "CRIT! "..math.floor(finalDamage) or tostring(math.floor(finalDamage))
-
 						lbl.TextColor3 = isCrit and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(255, 255, 255)
 
-						-- Настройки видимости по твоему запросу:
-						lbl.TextTransparency = isCrit and 0 or 0.1 -- Крит полностью виден
-						lbl.TextStrokeTransparency = 0.5 -- Контур для четкости
+						lbl.TextTransparency = isCrit and 0 or 0.1 
+						lbl.TextStrokeTransparency = 0.5 
 						lbl.TextScaled = true
 						lbl.Font = Enum.Font.LuckiestGuy
 						lbl.Parent = bgui
 						bgui.Parent = character
 
-						-- Время жизни 1 секунда
 						local displayTime = 1.0
 						TweenService:Create(bgui, TweenInfo.new(displayTime), {StudsOffset = bgui.StudsOffset + Vector3.new(0, 4, 0)}):Play()
 						TweenService:Create(lbl, TweenInfo.new(displayTime), {TextTransparency = 1}):Play()
