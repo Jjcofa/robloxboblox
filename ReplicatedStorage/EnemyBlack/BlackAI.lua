@@ -9,8 +9,8 @@ local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
 -- == 1. НАСТРОЙКИ ==
 local DAMAGE = 12           
-local ATTACK_COOLDOWN = 1  
-local ATTACK_RANGE = 3     -- Увеличили, чтобы доставал
+local ATTACK_COOLDOWN = 1   
+local ATTACK_RANGE = 4.5    -- [ИЗМЕНЕНИЕ] Поставил стандарт 4.5, чтобы точно доставал
 
 local AGRO_DISTANCE = 350
 local DELAY_MIN = 10
@@ -50,13 +50,11 @@ if billboard then
 end
 
 local function updateHealthBar()
-	-- Сначала проверяем, жива ли вообще "вывеска"
 	if billboard then
 		billboard.Enabled = (Humanoid.Health < Humanoid.MaxHealth)
 	end
 
-	-- [ИСПРАВЛЕНИЕ] Проверяем, находится ли полоска в игре (Workspace)
-	-- Если зомби уже удалился, мы просто пропускаем этот шаг и не получаем ошибку
+	-- Проверка на наличие в мире (защита от ошибки tween)
 	if healthBarFill and healthBarFill:IsDescendantOf(workspace) then
 		local percent = Humanoid.Health / Humanoid.MaxHealth
 		healthBarFill:TweenSize(UDim2.new(percent, 0, 1, 0), "Out", "Quad", 0.3, true)
@@ -68,7 +66,7 @@ updateHealthBar()
 -- == 3. ПУТЬ ==
 local AgentParameters = { 
 	Costs = { Water = 50 },
-	AgentRadius = 3, -- Чуть больше для черного
+	AgentRadius = 3, 
 	AgentCanJump = true
 }
 local Path = SimplePath.new(Character, AgentParameters)
@@ -159,20 +157,17 @@ end)
 -- == 4. ГЛАВНЫЙ ЦИКЛ ==
 local LastAttackTime = 0
 
--- [ВАЖНО] Вот здесь был разрыв. Теперь цикл один и целый.
 while Humanoid and Humanoid.Health > 0 do
 
-	-- 1. ПРОВЕРКА ЗАМОРОЗКИ (Если Anchored — спим)
+	-- 1. ПРОВЕРКА ЗАМОРОЗКИ
 	if HumanoidRootPart.Anchored then
 		if Path._status ~= SimplePath.StatusType.Idle then
 			Path:Stop() 
 		end
-		-- Можно сбросить скорость, чтобы анимация ходьбы тоже остановилась (если она управляется скоростью)
 		Humanoid.WalkSpeed = 0 
 		task.wait(0.5) 
 		continue 
 	else
-		-- Возвращаем скорость, если разморозили
 		if Humanoid.WalkSpeed == 0 then Humanoid.WalkSpeed = 16 end
 	end
 	-- -----------------------------
@@ -204,13 +199,10 @@ while Humanoid and Humanoid.Health > 0 do
 			local t = os.clock()
 			if (t - LastAttackTime) >= ATTACK_COOLDOWN then
 				LastAttackTime = t
-				-- Анимацию атаки здесь не вызываем, если надеемся на стандартный Animate.
-				-- Но стандартный Animate обычно НЕ умеет атаковать сам.
-				-- Если он просто стоит и смотрит — значит, удара нет.
 
 				if TargetHumanoid and TargetHumanoid.Health > 0 then
 					TargetHumanoid:TakeDamage(DAMAGE)
-					print("Black Zombie SMASH!") 
+					-- print("Black Zombie SMASH!") -- УБРАНО
 				end
 			end
 		else
