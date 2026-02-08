@@ -19,6 +19,7 @@ local enemyBlackTemplate = ReplicatedStorage:WaitForChild("EnemyBlack") -- [ДО
 local timeLeftValue = ReplicatedStorage:WaitForChild("TimeLeft") 
 local fireballTemplate = ReplicatedStorage:WaitForChild("Projectiles"):WaitForChild("Fireball") 
 local swordTemplate = ReplicatedStorage:WaitForChild("Projectiles"):WaitForChild("Sword")
+local bombTemplate = ReplicatedStorage:WaitForChild("Projectiles"):WaitForChild("Bomb")
 local appleTemplate = ReplicatedStorage:WaitForChild("AppleDrop")
 
 -- == БАЗА УЛУЧШЕНИЙ ==
@@ -197,10 +198,19 @@ local function startPlayerSession(player, weaponChoice)
 		initialStats.cooldown = 1.3 
 		initialStats.range = 6
 	elseif weaponChoice == "Fireball" then
-		initialStats.damage = 20
+		initialStats.damage = 15
 		initialStats.cooldown = 2.0
 		initialStats.speed = 40
 		initialStats.range = 60
+	elseif weaponChoice == "Bomb" then
+		local newBomb = bombTemplate:Clone()
+		newBomb.Parent = player.Character
+		-- Скрипт внутри newBomb (BombLogic) запустится автоматически
+
+		-- Убираем лишние параметры из сессии, так как бомба автономна
+		-- Но можно оставить stats для красоты интерфейса
+		initialStats.damage = 25
+		initialStats.cooldown = 3
 	end
 
 	activeSessions[player.UserId] = {
