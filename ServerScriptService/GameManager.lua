@@ -1,4 +1,5 @@
 -- @ScriptType: Script
+-- @ScriptType: Script
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
@@ -203,14 +204,11 @@ local function startPlayerSession(player, weaponChoice)
 		initialStats.speed = 40
 		initialStats.range = 60
 	elseif weaponChoice == "Bomb" then
-		local newBomb = bombTemplate:Clone()
-		newBomb.Parent = player.Character
-		-- Скрипт внутри newBomb (BombLogic) запустится автоматически
-
-		-- Убираем лишние параметры из сессии, так как бомба автономна
-		-- Но можно оставить stats для красоты интерфейса
-		initialStats.damage = 25
-		initialStats.cooldown = 3
+		initialStats.damage = 10      
+		initialStats.cooldown = 3   
+		initialStats.speed = 45       
+		initialStats.range = 8        -- БЫЛО 15 или 8
+		initialStats.critChance = 5
 	end
 
 	activeSessions[player.UserId] = {
@@ -299,7 +297,51 @@ local function startPlayerSession(player, weaponChoice)
 							session.lastAttackTime = exactTime
 						end
 
-						-- == МЕЧ ==
+						-- == БОМБА ==
+					elseif session.weapon == "Bomb" then
+						-- Ищем ближайшего врага
+						local target = findNearestEnemy(root.Position, session.stats.range * 3) -- *3 чтобы кидать дальше радиуса взрыва
+
+						if target then
+							local bomb = bombTemplate:Clone()
+							-- Спавним чуть выше и спереди игрока
+							bomb:PivotTo(root.CFrame * CFrame.new(0, 2, -2))
+
+							-- ПЕРЕДАЧА АТРИБУТОВ
+							bomb:SetAttribute("Damage", session.stats.damage)
+							bomb:SetAttribute("Speed", session.stats.speed)
+							bomb:SetAttribute("Range", session.stats.range)
+							bomb:SetAttribute("CritChance", session.stats.critChance)
+							bomb:SetAttribute("TargetPlayer", player.Name)
+
+							-- [ИСПРАВЛЕНИЕ] Создаем Target Value вручную, если его нет
+							local tVal = bomb:FindFirstChild("Target")
+							if not tVal then
+								tVal = Instance.new("ObjectValue")
+								tVal.Name = "Target"
+								tVal.Parent = bomb
+							end
+							tVal.Value = target -- Записываем цель (HumanoidRootPart врага)
+
+							-- Трейл (след)
+							local mainPart = bomb.PrimaryPart or bomb:FindFirstChildWhichIsA("BasePart")
+							if mainPart then
+								local att0 = Instance.new("Attachment", mainPart); att0.Position = Vector3.new(0, 0, 0.5)
+								local att1 = Instance.new("Attachment", mainPart); att1.Position = Vector3.new(0, 0, -0.5)
+								local trail = Instance.new("Trail")
+								trail.Attachment0 = att0; trail.Attachment1 = att1
+								trail.Color = ColorSequence.new(Color3.fromRGB(50, 50, 50)) -- Серый дым
+								trail.Transparency = NumberSequence.new(0.2, 1)
+								trail.Lifetime = 0.5
+								trail.WidthScale = NumberSequence.new(0.5, 0)
+								trail.Parent = mainPart
+							end
+
+							bomb.Parent = workspace
+							session.lastAttackTime = exactTime
+						end
+
+					-- == МЕЧ ==
 					elseif session.weapon == "Sword" then
 						local newSword = swordTemplate:Clone()
 						local handle = newSword:FindFirstChild("Handle")
