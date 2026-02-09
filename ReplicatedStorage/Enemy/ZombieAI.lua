@@ -1,11 +1,15 @@
 -- @ScriptType: Script
 local Debris = game:GetService("Debris")
 local PhysicsService = game:GetService("PhysicsService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SimplePath = require(script:WaitForChild("SimplePath")) 
 
 local Character = script.Parent
 local Humanoid = Character:WaitForChild("Humanoid")
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Ссылка на паузу
+local GamePaused = ReplicatedStorage:WaitForChild("GamePaused", 10)
 
 -- == 1. НАСТРОЙКИ ==
 local DAMAGE = 7            
@@ -183,6 +187,12 @@ while Humanoid and Humanoid.Health > 0 do
 			-- Поворот
 			HumanoidRootPart.CFrame = CFrame.new(HumanoidRootPart.Position, Vector3.new(CurrentTarget.Position.X, HumanoidRootPart.Position.Y, CurrentTarget.Position.Z))
 
+			-- ПРОВЕРКА НА ПАУЗУ ПЕРЕД АТАКОЙ
+			if GamePaused and GamePaused.Value == true then
+				task.wait(0.1)
+				continue
+			end
+			
 			local t = os.clock()
 			if (t - LastAttackTime) >= ATTACK_COOLDOWN then
 				LastAttackTime = t
