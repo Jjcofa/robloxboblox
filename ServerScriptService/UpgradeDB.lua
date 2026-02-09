@@ -1,8 +1,8 @@
 -- @ScriptType: ModuleScript
+-- @ScriptType: ModuleScript
 local UpgradeDB = {}
 
 -- Веса (шансы): Обычное = 100, Редкое = 30
--- Шанс редкого примерно 23%
 
 UpgradeDB.Upgrades = {
 	["Sword"] = {
@@ -16,7 +16,7 @@ UpgradeDB.Upgrades = {
 		{
 			id = "Sword_Range",
 			name = "Длинная рукоять",
-			desc = "+1 к Радиусу атаки", -- Влияет на дистанцию удара (Attack Range)
+			desc = "+1 к Радиусу атаки",
 			stats = {range = 1},
 			weight = 100
 		},
@@ -29,10 +29,10 @@ UpgradeDB.Upgrades = {
 		},
 		{
 			id = "Sword_Rare",
-			name = "ЛЕГЕНДАРНЫЙ МЕЧ",
+			name = "ЭКСКАЛИБУР",
 			desc = "[РЕДКОЕ] +3 Урона, -0.2 Перезарядки",
 			stats = {damage = 3, cooldown = -0.2},
-			weight = 30 -- Редкое
+			weight = 30
 		}
 	},
 
@@ -60,20 +60,58 @@ UpgradeDB.Upgrades = {
 		},
 		{
 			id = "Fire_Rare",
-			name = "ДРЕВНЯЯ МАГИЯ",
+			name = "МЕТЕОРИТ",
 			desc = "[РЕДКОЕ] +4 Урона, +4 Скорости",
 			stats = {damage = 4, speed = 4},
-			weight = 30 -- Редкое
+			weight = 30
+		}
+	},
+
+	["Bomb"] = {
+		{
+			id = "Bomb_Dmg",
+			name = "Больше пороха",
+			desc = "+5 Урона",
+			stats = {damage = 5},
+			weight = 100
+		},
+		{
+			id = "Bomb_CD",
+			name = "Короткий фитиль",
+			desc = "-0.2 сек перезарядки",
+			stats = {cooldown = -0.2},
+			weight = 100
+		},
+		{
+			id = "Bomb_Crit",
+			name = "Осколки",
+			desc = "+5% Шанс крита",
+			stats = {critChance = 5},
+			weight = 100
+		},
+		{
+			id = "Bomb_Rare",
+			name = "АТОМНАЯ БОМБА",
+			desc = "[РЕДКОЕ] +5 Урона, +5 Крит. шанс",
+			stats = {damage = 5, critChance = 5},
+			weight = 30
 		}
 	}
 }
 
--- Функция выбора 2 случайных улучшений для конкретного оружия
+-- Функция выбора 2 случайных улучшений
 function UpgradeDB.getRandomUpgrades(weaponName)
 	local pool = UpgradeDB.Upgrades[weaponName]
-	if not pool then return {} end
 
-	-- Создаем лотерейный барабан с учетом веса
+	-- Защита от ошибки: если для оружия нет улучшений, возвращаем пустышки, чтобы не крашнуло
+	if not pool then 
+		warn("UpgradeDB: Нет улучшений для оружия " .. tostring(weaponName))
+		return {
+			{name = "Ошибка", desc = "Нет данных", stats = {}},
+			{name = "Ошибка", desc = "Нет данных", stats = {}}
+		}
+	end
+
 	local lottery = {}
 	for _, upg in pairs(pool) do
 		for i = 1, upg.weight do
@@ -81,11 +119,9 @@ function UpgradeDB.getRandomUpgrades(weaponName)
 		end
 	end
 
-	-- Выбираем первого победителя
 	local option1 = lottery[math.random(1, #lottery)]
 	local option2 = nil
 
-	-- Выбираем второго (чтобы не совпадал с первым)
 	repeat
 		option2 = lottery[math.random(1, #lottery)]
 	until option2.id ~= option1.id
